@@ -20,7 +20,7 @@ $STD apt-get install -y \
   git
 msg_ok "Installed Dependencies"
 
-PHP_VERSION="8.2" setup_php
+PHP_FPM="YES" PHP_VERSION="8.2" setup_php
 setup_composer
 fetch_and_deploy_gh_release "baikal" "sabre-io/Baikal" "tarball"
 
