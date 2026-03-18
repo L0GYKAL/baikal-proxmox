@@ -24,7 +24,7 @@ Baikal LXC (created by this script)
 On your Proxmox host:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/L0GYKAL/baikal-proxmox/main/ct/baikal-docker.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/L0GYKAL/baikal-proxmox/main/ct/baikal-infcloud.sh)"
 ```
 
 This automatically:
@@ -184,7 +184,7 @@ Most clients also support autodiscovery — just entering the server URL may be 
 Re-run the script from inside the container to update Baikal to the latest release:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/L0GYKAL/baikal-proxmox/main/ct/baikal-docker.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/L0GYKAL/baikal-proxmox/main/ct/baikal-infcloud.sh)"
 ```
 
 ## Security

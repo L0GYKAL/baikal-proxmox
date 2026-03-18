@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Thin wrapper around community-scripts build.func
+# Redirects install and ct script downloads to this repo
+# All other shared functions (core.func, tools.func, etc.) stay upstream
+
+SELF_REPO="https://raw.githubusercontent.com/L0GYKAL/baikal-proxmox/main"
+UPSTREAM_REPO="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main"
+
+# Download upstream build.func and patch URLs that should point to our repo:
+# - install/*.sh (our install script)
+# - ct/*.sh (for the /usr/bin/update helper created by customize())
+_patched_build=$(curl -fsSL "${UPSTREAM_REPO}/misc/build.func" | sed \
+  -e "s|${UPSTREAM_REPO}/install/|${SELF_REPO}/install/|g" \
+  -e "s|${UPSTREAM_REPO}/ct/|${SELF_REPO}/ct/|g")
+source <(echo "$_patched_build")
