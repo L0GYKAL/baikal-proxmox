@@ -8,11 +8,10 @@ No Docker required. Everything runs natively inside a single LXC.
 
 ```
 Central Caddy (separate LXC)
-  ├── /dav.php*          → Baikal LXC:80
-  ├── /admin/*           → Baikal LXC:80
-  ├── /infcloud/*        → Baikal LXC:81
-  ├── /.well-known/cal*  → redirect to /dav.php
-  └── /*                 → Baikal LXC:80
+  ├── /baikal/*          → Baikal LXC:80 (CalDAV/CardDAV + Admin)
+  ├── /infcloud/*        → Baikal LXC:81 (Web UI)
+  ├── /.well-known/cal*  → redirect to /baikal/dav.php
+  └── /other-service/*   → Other LXC:PORT
 
 Baikal LXC (created by this script)
   └── nginx
@@ -47,15 +46,26 @@ This automatically:
 
 ## Central Caddy Configuration
 
-This script does **not** include a reverse proxy. Add this to your central Caddy's Caddyfile:
+This script does **not** include a reverse proxy. You need a central Caddy instance (install via [community script](https://community-scripts.org/scripts/caddy)) to handle TLS and routing.
 
-### With a domain (auto HTTPS via Let's Encrypt)
+Add the Baikal routes to your Caddyfile. Choose one of the three options below.
+
+### Option A — Subfolders (no domain or DNS needed)
+
+Best for local/Tailscale access with multiple services on one Caddy. All services share one `:443` block, routed by path:
 
 ```caddyfile
-dav.yourdomain.com {
-    # CalDAV/CardDAV autodiscovery (RFC 6764)
-    redir /.well-known/caldav /dav.php permanent
-    redir /.well-known/carddav /dav.php permanent
+:443 {
+    tls internal
+
+    # Baikal CalDAV/CardDAV
+    redir /.well-known/caldav /baikal/dav.php permanent
+    redir /.well-known/carddav /baikal/dav.php permanent
+
+    handle /baikal/* {
+        uri strip_prefix /baikal
+        reverse_proxy BAIKAL_LXC_IP:80
+    }
 
     # InfCloud web UI
     handle /infcloud/* {
@@ -63,17 +73,22 @@ dav.yourdomain.com {
         reverse_proxy BAIKAL_LXC_IP:81
     }
 
-    # Everything else goes to Baikal
-    handle /* {
-        reverse_proxy BAIKAL_LXC_IP:80
-    }
+    # Add more services here:
+    # handle /gitea/* {
+    #     uri strip_prefix /gitea
+    #     reverse_proxy GITEA_LXC_IP:3000
+    # }
 }
 ```
 
-### Tailscale only (no public domain)
+Access via `https://CADDY_IP/baikal/`, `https://CADDY_IP/infcloud/`, etc.
+
+### Option B — Local subdomains (requires local DNS)
+
+If you run a local DNS server (Pi-hole, AdGuard Home) or edit `/etc/hosts` on your devices, point `*.home.lab` to your Caddy LXC IP:
 
 ```caddyfile
-:443 {
+dav.home.lab {
     tls internal
 
     redir /.well-known/caldav /dav.php permanent
@@ -88,30 +103,61 @@ dav.yourdomain.com {
         reverse_proxy BAIKAL_LXC_IP:80
     }
 }
+
+# Add more services as separate blocks:
+# git.home.lab {
+#     tls internal
+#     reverse_proxy GITEA_LXC_IP:3000
+# }
 ```
+
+### Option C — Public domain (auto HTTPS via Let's Encrypt)
+
+If you have a domain pointed at your Caddy instance:
+
+```caddyfile
+dav.yourdomain.com {
+    redir /.well-known/caldav /dav.php permanent
+    redir /.well-known/carddav /dav.php permanent
+
+    handle /infcloud/* {
+        uri strip_prefix /infcloud
+        reverse_proxy BAIKAL_LXC_IP:81
+    }
+
+    handle /* {
+        reverse_proxy BAIKAL_LXC_IP:80
+    }
+}
+```
+
+Caddy auto-provisions Let's Encrypt certs — no `tls internal` needed.
+
+### After editing
 
 Replace `BAIKAL_LXC_IP` with the IP shown after install. Then reload:
 
 ```bash
-caddy reload --config /etc/caddy/Caddyfile
+systemctl reload caddy
 ```
 
 ## First-Time Setup
 
-1. Go to `https://yourdomain/admin/` (or `http://BAIKAL_LXC_IP` directly)
+1. Go to `https://CADDY_IP/baikal/admin/` (Option A) or `https://dav.home.lab/admin/` (Option B/C)
 2. Baikal shows a setup wizard — set an admin password and finish setup
 3. In the admin panel, go to **Users and Resources** > **Add user**
 4. Create your account (e.g. `john` with a password)
 
 ## Using InfCloud
 
-Go to `https://yourdomain/infcloud/` and log in with the Baikal user you created.
+Go to `https://CADDY_IP/infcloud/` and log in with the Baikal user you created.
 
 ## Connecting Devices
 
 | Setting | Value |
 |---------|-------|
-| Server URL | `https://yourdomain/dav.php/principals/` |
+| Server URL (Option A) | `https://CADDY_IP/baikal/dav.php/principals/` |
+| Server URL (Option B/C) | `https://dav.home.lab/dav.php/principals/` |
 | Username | Your Baikal user |
 | Password | Your Baikal password |
 
@@ -129,9 +175,9 @@ System Settings > Internet Accounts > Add Other > CalDAV account
 
 ### Thunderbird
 
-Add CalDAV calendar with URL: `https://yourdomain/dav.php/principals/your-username/`
+Add CalDAV calendar with URL: `https://CADDY_IP/baikal/dav.php/principals/your-username/`
 
-Most clients also support autodiscovery — just entering `https://yourdomain` may be enough.
+Most clients also support autodiscovery — just entering the server URL may be enough.
 
 ## Updating
 
