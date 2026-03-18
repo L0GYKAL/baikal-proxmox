@@ -62,8 +62,15 @@ start
 build_container
 description
 
+ADMIN_PASS=$(pct exec $CTID -- cat /opt/baikal/.admin_password 2>/dev/null)
+
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW} Access it using the following URLs (configure your central Caddy to proxy these):${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}http://${IP} (Baikal - CalDAV/CardDAV + Admin)${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:81 (InfCloud Web UI)${CL}"
+if [[ -n "$ADMIN_PASS" ]]; then
+  echo -e "${INFO}${YW} Baikal Admin Credentials:${CL}"
+  echo -e "${TAB}${GATEWAY}${BGN}Username: admin${CL}"
+  echo -e "${TAB}${GATEWAY}${BGN}Password: ${ADMIN_PASS}${CL}"
+fi
