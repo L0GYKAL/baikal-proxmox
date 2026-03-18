@@ -13,82 +13,32 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing dependencies"
+msg_info "Installing Dependencies"
 $STD apt-get install -y \
-  ca-certificates \
-  curl \
-  gnupg
-msg_ok "Installed dependencies"
+  nginx \
+  unzip \
+  git
+msg_ok "Installed Dependencies"
 
-msg_info "Installing Docker"
-$STD install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
-$STD apt-get update
-$STD apt-get install -y \
-  docker-ce \
-  docker-ce-cli \
-  containerd.io \
-  docker-compose-plugin
-msg_ok "Installed Docker"
+PHP_VERSION="8.2" setup_php
+setup_composer
+fetch_and_deploy_gh_release "baikal" "sabre-io/Baikal" "tarball"
+
+msg_info "Configuring Baikal"
+cd /opt/baikal
+$STD composer install
+chown -R www-data:www-data /opt/baikal/
+chmod -R 755 /opt/baikal/
+msg_ok "Configured Baikal"
 
 msg_info "Downloading InfCloud"
 INFCLOUD_VERSION="0.13.1"
-mkdir -p /opt/baikal-docker/infcloud
 curl -fsSL "https://www.inf-it.com/InfCloud_${INFCLOUD_VERSION}.zip" -o /tmp/infcloud.zip
-$STD apt-get install -y unzip
-unzip -qo /tmp/infcloud.zip -d /opt/baikal-docker/infcloud
+unzip -qo /tmp/infcloud.zip -d /opt/infcloud
 rm /tmp/infcloud.zip
-msg_ok "Downloaded InfCloud ${INFCLOUD_VERSION}"
-
-msg_info "Deploying Baikal + InfCloud"
-cat <<'EOF' >/opt/baikal-docker/docker-compose.yml
-services:
-  baikal:
-    image: ckulka/baikal:nginx
-    container_name: baikal
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - baikal-config:/var/www/baikal/config
-      - baikal-data:/var/www/baikal/Specific
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-
-  infcloud:
-    image: nginx:alpine
-    container_name: infcloud
-    restart: unless-stopped
-    ports:
-      - "81:80"
-    volumes:
-      - ./infcloud:/usr/share/nginx/html:ro
-    read_only: true
-    tmpfs:
-      - /var/cache/nginx
-      - /var/run
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks: []
-
-volumes:
-  baikal-config:
-  baikal-data:
-EOF
 
 # Configure InfCloud to connect to Baikal through the central Caddy
-cat <<'JSEOF' >/opt/baikal-docker/infcloud/config.js
+cat <<'JSEOF' >/opt/infcloud/config.js
 var defined_var = 'config.js';
 
 var globalNetworkCheckSettings = {
@@ -123,14 +73,63 @@ var globalResourceAlphabetSorting = true;
 var globalNewContactRecreate = false;
 JSEOF
 
-cd /opt/baikal-docker
-$STD docker compose up -d
-msg_ok "Deployed Baikal + InfCloud"
+chown -R www-data:www-data /opt/infcloud/
+msg_ok "Downloaded InfCloud ${INFCLOUD_VERSION}"
+
+msg_info "Configuring Nginx"
+cat <<'EOF' >/etc/nginx/sites-available/baikal
+server {
+    listen 80;
+    server_name _;
+
+    root /opt/baikal/html;
+    index index.php;
+
+    # CalDAV/CardDAV autodiscovery
+    rewrite ^/.well-known/caldav  /dav.php redirect;
+    rewrite ^/.well-known/carddav /dav.php redirect;
+
+    location / {
+        try_files $uri $uri/ /index.php$is_args$args;
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    # Block access to sensitive files
+    location ~ \.(ht|sqlite|yaml)$ {
+        deny all;
+    }
+}
+
+server {
+    listen 81;
+    server_name _;
+
+    root /opt/infcloud;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # Only serve static files
+    location ~ \.php$ {
+        deny all;
+    }
+}
+EOF
+
+rm -f /etc/nginx/sites-enabled/default
+ln -sf /etc/nginx/sites-available/baikal /etc/nginx/sites-enabled/baikal
+$STD nginx -t
+$STD systemctl restart nginx
+$STD systemctl enable nginx
+msg_ok "Configured Nginx"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-$STD apt-get -y autoremove
-$STD apt-get -y autoclean
-msg_ok "Cleaned"
+cleanup_lxc

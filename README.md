@@ -2,6 +2,8 @@
 
 One-command installer for [Baikal](https://sabre.io/baikal/) (CalDAV/CardDAV) and [InfCloud](https://www.inf-it.com/open-source/clients/infcloud/) (web UI) on Proxmox VE.
 
+No Docker required. Everything runs natively inside a single LXC.
+
 ## Architecture
 
 ```
@@ -13,8 +15,9 @@ Central Caddy (separate LXC)
   └── /*                 → Baikal LXC:80
 
 Baikal LXC (created by this script)
-  ├── Baikal container   (port 80) — CalDAV/CardDAV + admin
-  └── InfCloud container (port 81) — static web UI
+  └── nginx
+        ├── :80 → Baikal (PHP-FPM + SQLite)
+        └── :81 → InfCloud (static files)
 ```
 
 ## Install
@@ -26,9 +29,10 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/L0GYKAL/baikal-proxmox/m
 ```
 
 This automatically:
-- Creates a Debian 12 LXC container (1 CPU, 512MB RAM, 4GB disk)
-- Installs Docker
-- Deploys Baikal and InfCloud
+- Creates a Debian 12 LXC container
+- Installs nginx + PHP-FPM
+- Deploys Baikal from the latest GitHub release
+- Downloads and configures InfCloud
 - Outputs the LXC IP address
 
 ## Default Resources
@@ -36,14 +40,14 @@ This automatically:
 | Resource | Value |
 |----------|-------|
 | CPU | 1 core |
-| RAM | 512 MB |
-| Disk | 4 GB |
+| RAM | 256 MB |
+| Disk | 2 GB |
 | OS | Debian 12 |
 | Privileged | No |
 
 ## Central Caddy Configuration
 
-This script does **not** include its own reverse proxy. You need a central Caddy instance to handle TLS and routing. Add this to your Caddyfile:
+This script does **not** include a reverse proxy. Add this to your central Caddy's Caddyfile:
 
 ### With a domain (auto HTTPS via Let's Encrypt)
 
@@ -86,9 +90,7 @@ dav.yourdomain.com {
 }
 ```
 
-Replace `BAIKAL_LXC_IP` with the IP shown after install.
-
-Then reload Caddy:
+Replace `BAIKAL_LXC_IP` with the IP shown after install. Then reload:
 
 ```bash
 caddy reload --config /etc/caddy/Caddyfile
@@ -96,7 +98,7 @@ caddy reload --config /etc/caddy/Caddyfile
 
 ## First-Time Setup
 
-1. Go to `https://yourdomain/admin/` (or `http://BAIKAL_LXC_IP:80` directly)
+1. Go to `https://yourdomain/admin/` (or `http://BAIKAL_LXC_IP` directly)
 2. Baikal shows a setup wizard — set an admin password and finish setup
 3. In the admin panel, go to **Users and Resources** > **Add user**
 4. Create your account (e.g. `john` with a password)
@@ -106,8 +108,6 @@ caddy reload --config /etc/caddy/Caddyfile
 Go to `https://yourdomain/infcloud/` and log in with the Baikal user you created.
 
 ## Connecting Devices
-
-Use these settings on any CalDAV/CardDAV client:
 
 | Setting | Value |
 |---------|-------|
@@ -135,7 +135,7 @@ Most clients also support autodiscovery — just entering `https://yourdomain` m
 
 ## Updating
 
-Re-run the script from inside the container to pull latest images:
+Re-run the script from inside the container to update Baikal to the latest release:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/L0GYKAL/baikal-proxmox/main/ct/baikal-docker.sh)"
@@ -143,10 +143,11 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/L0GYKAL/baikal-proxmox/m
 
 ## Security
 
-- Both containers run with `no-new-privileges` and all capabilities dropped
-- InfCloud container is fully read-only with no network access to Baikal
+- Nginx blocks access to `.ht`, `.sqlite`, and `.yaml` files
+- InfCloud is served as static files only — PHP execution is denied on port 81
 - InfCloud connects to Baikal through the browser via your central Caddy
-- Baikal data is persisted in Docker named volumes (`baikal-config`, `baikal-data`)
+- No Docker daemon, no extra attack surface
+- Runs in an unprivileged LXC container
 
 ## License
 

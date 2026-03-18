@@ -5,11 +5,11 @@ source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxV
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://sabre.io/baikal/ | https://www.inf-it.com/open-source/clients/infcloud/
 
-APP="Baikal-Docker"
-var_tags="${var_tags:-caldav;carddav;docker}"
+APP="Baikal-InfCloud"
+var_tags="${var_tags:-caldav;carddav}"
 var_cpu="${var_cpu:-1}"
-var_ram="${var_ram:-512}"
-var_disk="${var_disk:-4}"
+var_ram="${var_ram:-256}"
+var_disk="${var_disk:-2}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-12}"
 var_unprivileged="${var_unprivileged:-1}"
@@ -24,20 +24,37 @@ function update_script() {
   check_container_storage
   check_container_resources
 
-  if [[ ! -f /opt/baikal-docker/docker-compose.yml ]]; then
+  if [[ ! -d /opt/baikal ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
 
-  msg_info "Pulling latest images"
-  cd /opt/baikal-docker
-  $STD docker compose pull
-  msg_ok "Pulled latest images"
+  if check_for_gh_release "baikal" "sabre-io/Baikal"; then
+    msg_info "Stopping Service"
+    systemctl stop nginx
+    msg_ok "Stopped Service"
 
-  msg_info "Restarting containers"
-  $STD docker compose up -d
-  msg_ok "Restarted containers"
+    msg_info "Backing up data"
+    mv /opt/baikal /opt/baikal-backup
+    msg_ok "Backed up data"
 
+    fetch_and_deploy_gh_release "baikal" "sabre-io/Baikal" "tarball"
+
+    msg_info "Restoring configuration"
+    cp -r /opt/baikal-backup/config/baikal.yaml /opt/baikal/config/
+    cp -r /opt/baikal-backup/Specific/ /opt/baikal/
+    chown -R www-data:www-data /opt/baikal/
+    chmod -R 755 /opt/baikal/
+    cd /opt/baikal
+    $STD composer install
+    rm -rf /opt/baikal-backup
+    msg_ok "Restored configuration"
+
+    msg_info "Starting Service"
+    systemctl start nginx
+    msg_ok "Started Service"
+    msg_ok "Updated successfully!"
+  fi
   exit
 }
 
@@ -48,5 +65,5 @@ description
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW} Access it using the following URLs (configure your central Caddy to proxy these):${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:80 (Baikal - CalDAV/CardDAV + Admin)${CL}"
+echo -e "${TAB}${GATEWAY}${BGN}http://${IP} (Baikal - CalDAV/CardDAV + Admin)${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:81 (InfCloud Web UI)${CL}"
