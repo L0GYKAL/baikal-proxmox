@@ -47,6 +47,6 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URLs:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP} (Baikal)${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:81 (InfCloud)${CL}"
+echo -e "${INFO}${YW} Access it using the following URLs (configure your central Caddy to proxy these):${CL}"
+echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:80 (Baikal - CalDAV/CardDAV + Admin)${CL}"
+echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:81 (InfCloud Web UI)${CL}"
