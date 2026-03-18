@@ -34,8 +34,9 @@ msg_ok "Configured Baikal"
 msg_info "Downloading InfCloud"
 INFCLOUD_VERSION="0.13.1"
 curl -fsSL "https://www.inf-it.com/InfCloud_${INFCLOUD_VERSION}.zip" -o /tmp/infcloud.zip
-unzip -qo /tmp/infcloud.zip -d /opt/infcloud
-rm /tmp/infcloud.zip
+unzip -qo /tmp/infcloud.zip -d /tmp/infcloud-extract
+mv /tmp/infcloud-extract/infcloud /opt/infcloud
+rm -rf /tmp/infcloud.zip /tmp/infcloud-extract
 
 # Configure InfCloud to connect to Baikal through the central Caddy
 cat <<'JSEOF' >/opt/infcloud/config.js
